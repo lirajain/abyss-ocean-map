@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Abyss - The Living Ocean Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root{
+    --obis:#25d0c0; --gbif:#7ee787; --happy:#ffb454; --inat:#c792ea; --noaa:#ff6b81;
+    --deep:#03101c;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--deep);color:#eaf6ff;overflow:hidden}
+  #map{position:absolute;inset:0;background:var(--deep)}
+  .leaflet-tile-pane{filter:brightness(.6) saturate(1.5) contrast(1.05) hue-rotate(-8deg)}
+  .leaflet-container{background:#03101c}
+
+  /* Ambient + rays */
+  #ambient{position:absolute;inset:0;pointer-events:none;z-index:398}
+  #ambient .vignette{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 30%,transparent 40%,rgba(2,10,20,.55) 100%)}
+  #ambient .ray{position:absolute;top:-20%;width:22vw;height:150%;background:linear-gradient(180deg,rgba(120,220,255,.10),transparent 70%);transform:rotate(12deg);filter:blur(14px);animation:sway 12s ease-in-out infinite}
+  #ambient .ray:nth-child(2){left:18%;animation-delay:-3s;opacity:.7}
+  #ambient .ray:nth-child(3){left:46%;animation-delay:-6s;width:16vw;opacity:.5}
+  #ambient .ray:nth-child(4){left:72%;animation-delay:-9s;opacity:.8}
+  @keyframes sway{0%,100%{transform:translateX(-3vw) rotate(12deg)}50%{transform:translateX(3vw) rotate(9deg)}}
+
+  #bubbles{position:absolute;inset:0;pointer-events:none;z-index:399;overflow:hidden}
+  .bubble{position:absolute;bottom:-40px;border-radius:50%;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.55),rgba(180,230,255,.06));box-shadow:0 0 8px rgba(150,220,255,.25);animation:rise linear infinite}
+  @keyframes rise{0%{transform:translateY(0);opacity:0}10%{opacity:.8}90%{opacity:.6}100%{transform:translateY(-105vh) translateX(20px);opacity:0}}
+
+  /* ---- Living creatures layer ---- */
+  #life{position:absolute;inset:0;z-index:405;pointer-events:none;overflow:hidden}
+  .swim{position:absolute;left:0;top:0;will-change:transform}
+  .swim .body{filter:drop-shadow(0 8px 16px rgba(0,0,0,.45))}
+  .swim .wag{animation:wag 2.8s ease-in-out infinite;transform-origin:75% 50%}
+  @keyframes wag{0%,100%{transform:rotate(-3.5deg)}50%{transform:rotate(3.5deg)}}
+  .swim.jelly .wag{animation:pulse 2.4s ease-in-out infinite;transform-origin:50% 40%}
+  @keyframes pulse{0%,100%{transform:scaleY(1) scaleX(1)}50%{transform:scaleY(.86) scaleX(1.08)}}
+  .swim.jelly .body{filter:drop-shadow(0 0 14px rgba(199,146,234,.6))}
+  .swim svg{display:block;overflow:visible}
+  .thought{position:absolute;left:52%;bottom:88%;background:rgba(255,255,255,.95);color:#08344c;border-radius:16px;padding:7px 12px;font-size:13px;font-weight:600;white-space:nowrap;box-shadow:0 8px 22px rgba(0,0,0,.4);opacity:0;transform:translateY(8px) scale(.9);transition:opacity .35s,transform .35s}
+  .thought::after{content:"";position:absolute;left:20px;top:100%;border:8px solid transparent;border-top-color:rgba(255,255,255,.95)}
+  .thought.show{opacity:1;transform:translateY(0) scale(1)}
+
+  /* Brand */
+  #brand{position:absolute;top:14px;left:16px;z-index:500;pointer-events:none}
+  #brand h1{font-size:20px;letter-spacing:3px;font-weight:700;text-shadow:0 2px 18px rgba(0,0,0,.8)}
+  #brand h1 span{color:#5ad2ff}
+  #brand p{font-size:11px;letter-spacing:1px;color:#8fb8cf;margin-top:2px}
+
+  .dock{position:absolute;z-index:500;background:rgba(7,24,39,.82);border:1px solid rgba(90,210,255,.18);border-radius:14px;backdrop-filter:blur(10px);box-shadow:0 10px 40px rgba(0,0,0,.45)}
+  #controls{top:70px;left:16px;width:270px;padding:14px 15px}
+  .sect{margin-bottom:15px}
+  .sect:last-child{margin-bottom:0}
+  .sect h3{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#7fd4ff;margin-bottom:9px;display:flex;justify-content:space-between}
+  .sect h3 b{color:#cfe9ff;font-weight:600}
+  .src{display:flex;align-items:center;gap:9px;padding:6px 7px;border-radius:9px;cursor:pointer;transition:background .15s;user-select:none}
+  .src:hover{background:rgba(255,255,255,.05)}
+  .src.off{opacity:.38}
+  .dot{width:11px;height:11px;border-radius:50%;box-shadow:0 0 9px var(--c);background:var(--c);flex:none}
+  .src .lbl{font-size:12.5px;flex:1}
+  .src .n{font-size:10.5px;color:#8fb8cf}
+  .src .box{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--c);display:flex;align-items:center;justify-content:center;flex:none}
+  .src .box::after{content:"✓";font-size:10px;color:#04141f;font-weight:800}
+  .src.off .box{background:transparent}
+  .src:not(.off) .box{background:var(--c)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:11.5px;padding:5px 10px;border-radius:20px;border:1px solid rgba(120,200,255,.3);cursor:pointer;transition:.15s;background:rgba(255,255,255,.03)}
+  .chip.on{background:#0d3350;border-color:#5ad2ff;color:#dff2ff}
+  .chip.off{opacity:.4}
+  #season{width:100%;accent-color:#5ad2ff;margin-top:4px}
+  .mrow{display:flex;justify-content:space-between;font-size:10px;color:#7fa9c2;margin-top:2px}
+
+  #gauge{bottom:16px;left:16px;padding:11px 14px;width:210px}
+  #gauge .big{font-size:22px;font-weight:700;color:#7fe3ff}
+  #gauge .sub{font-size:10.5px;color:#8fb8cf;letter-spacing:.5px;margin-top:1px}
+  #gauge .bar{height:6px;border-radius:3px;background:linear-gradient(90deg,#7fe3ff,#1b5f8a);margin-top:8px;transition:width .4s}
+  #gauge .zone{font-size:10px;margin-top:6px;color:#bcd8e8}
+  #gauge .tip{font-size:9.5px;color:#6f96ad;margin-top:5px}
+
+  #count{top:16px;right:16px;padding:9px 15px;font-size:12.5px;z-index:500}
+  #count b{color:#7fe3ff;font-size:15px}
+
+  #info{position:absolute;top:0;right:0;height:100%;width:360px;max-width:88vw;z-index:600;background:linear-gradient(180deg,#0a2135,#051320);border-left:1px solid rgba(90,210,255,.25);
+    transform:translateX(105%);transition:transform .35s cubic-bezier(.2,.8,.2,1);box-shadow:-14px 0 50px rgba(0,0,0,.5);overflow-y:auto}
+  #info.open{transform:translateX(0)}
+  #info .hero{height:190px;position:relative;display:flex;align-items:flex-end;overflow:hidden}
+  #info .hero .emoji{position:absolute;right:-10px;top:-14px;font-size:150px;opacity:.28}
+  #info .hero .wash{position:absolute;inset:0;background:linear-gradient(180deg,transparent,rgba(5,19,32,.9))}
+  #info .hero .caption{position:relative;padding:12px 18px;font-size:10.5px;color:#a9cee2;letter-spacing:.4px}
+  #info .close{position:absolute;top:12px;right:14px;z-index:5;width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:16px;cursor:pointer;line-height:1}
+  #info .body{padding:4px 20px 30px}
+  #info h2{font-size:21px;margin-top:8px}
+  #info .sci{font-style:italic;color:#8fb8cf;font-size:12.5px;margin-bottom:12px}
+  #info .badges{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:15px}
+  .badge{font-size:10.5px;padding:4px 9px;border-radius:20px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)}
+  .badge.src{border-color:var(--c);color:var(--c)}
+  #info .row{display:flex;gap:10px;margin-bottom:12px}
+  #info .stat{flex:1;background:rgba(255,255,255,.04);border-radius:10px;padding:9px 11px}
+  #info .stat .k{font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:#7fa9c2}
+  #info .stat .v{font-size:13px;margin-top:2px;color:#e6f4ff}
+  #info p.story{font-size:13.5px;line-height:1.6;color:#cfe4f2;margin-bottom:14px}
+  #info .fact{background:rgba(90,210,255,.09);border-left:3px solid #5ad2ff;padding:10px 13px;border-radius:0 10px 10px 0;font-size:12.5px;line-height:1.5;margin-bottom:14px}
+  #info .fact b{color:#7fe3ff}
+  #info .live{display:block;text-align:center;padding:11px;border-radius:10px;background:linear-gradient(90deg,#ff6b81,#ff3b5c);color:#fff;font-weight:700;font-size:13px;text-decoration:none;letter-spacing:.5px;box-shadow:0 6px 18px rgba(255,60,90,.35)}
+  #info .obs{font-size:11px;color:#8fb8cf;margin-top:14px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px}
+
+  #intro{position:absolute;inset:0;z-index:900;background:radial-gradient(ellipse at 50% 40%,#0b3350,#02090f);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;transition:opacity .9s;padding:20px}
+  #intro h1{font-size:clamp(30px,7vw,64px);letter-spacing:8px;font-weight:800;text-shadow:0 4px 30px rgba(0,0,0,.7)}
+  #intro h1 span{color:#5ad2ff}
+  #intro p{max-width:460px;color:#a9cee2;font-size:14px;line-height:1.6;margin:16px 0 26px}
+  #dive{padding:13px 34px;border-radius:30px;border:1.5px solid #5ad2ff;background:rgba(90,210,255,.12);color:#dff2ff;font-size:15px;letter-spacing:2px;cursor:pointer;transition:.2s}
+  #dive:hover{background:#5ad2ff;color:#052033;box-shadow:0 0 30px rgba(90,210,255,.5)}
+  #intro.hide{opacity:0;pointer-events:none}
+
+  .hint{font-size:10px;color:#6f96ad;margin-top:9px;line-height:1.4}
+  .leaflet-control-attribution{background:rgba(3,16,28,.7)!important;color:#6f96ad!important}
+  .leaflet-control-attribution a{color:#8fb8cf!important}
+  .leaflet-bar a{background:#0a2135!important;color:#cfe9ff!important;border-color:rgba(90,210,255,.2)!important}
+  @media(max-width:560px){#controls{width:220px}#gauge{display:none}}
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="ambient"><div class="vignette"></div><div class="ray"></div><div class="ray"></div><div class="ray"></div><div class="ray"></div></div>
+<div id="bubbles"></div>
+<div id="life"></div>
+
+<div id="brand"><h1>ABY<span>SS</span></h1><p>THE LIVING OCEAN MAP</p></div>
+<div class="dock" id="count">Showing <b id="cnum">0</b> hotspots</div>
+
+<div class="dock" id="controls">
+  <div class="sect">
+    <h3>Data sources <b id="srcAll">all on</b></h3>
+    <div id="sources"></div>
+    <div class="hint">Toggle a source to see only its hotspots. Colours match the dots on the map.</div>
+  </div>
+  <div class="sect"><h3>Creatures</h3><div class="chips" id="chips"></div></div>
+  <div class="sect">
+    <h3>Season <b id="mlabel">All year</b></h3>
+    <input type="range" id="season" min="0" max="12" value="0" step="1" />
+    <div class="mrow"><span>All</span><span>Jun</span><span>Dec</span></div>
+    <div class="hint">Slide to a month to see who is passing through then.</div>
+  </div>
+</div>
+
+<div class="dock" id="gauge">
+  <div class="big" id="depth">Surface</div>
+  <div class="sub" id="depthsub">Drifting above the blue</div>
+  <div class="bar" id="depthbar" style="width:8%"></div>
+  <div class="zone" id="zone">🌊 Sunlight zone</div>
+  <div class="tip" id="tip">Zoom in - the creatures swim closer 🐋</div>
+</div>
+
+<div id="info">
+  <button class="close" onclick="closeInfo()">✕</button>
+  <div class="hero" id="hero"><div class="emoji" id="hEmoji">🐋</div><div class="wash"></div><div class="caption" id="hCap"></div></div>
+  <div class="body" id="ibody"></div>
+</div>
+
+<div id="intro">
+  <h1>ABY<span>SS</span></h1>
+  <p>A living map of the ocean. Whales, sharks, mantas and turtles swim the whole scene - zoom in and they drift right up to you (and yes, they have opinions). Filter by who spotted them and dive into their stories, all on real open marine data.</p>
+  <button id="dive">DIVE IN</button>
+  <div class="hint">Real ocean terrain · 47 hotspots · living creatures · 5 data sources</div>
+</div>
+
+<script>
+/* ---------- Sources ---------- */
+const SOURCES = {
+  OBIS:{name:"OBIS research surveys",short:"Research survey",color:"#25d0c0"},
+  GBIF:{name:"GBIF aggregated records",short:"Aggregated record",color:"#7ee787"},
+  Happywhale:{name:"Happywhale photo-ID",short:"Citizen photo-ID",color:"#ffb454"},
+  iNaturalist:{name:"iNaturalist divers",short:"Diver / snorkeler",color:"#c792ea"},
+  NOAA:{name:"NOAA live cams & expeditions",short:"Live cam / expedition",color:"#ff6b81"}
+};
+const TYPES = {
+  whale:{label:"Whales",emoji:"🐋"}, dolphin:{label:"Dolphins",emoji:"🐬"},
+  shark:{label:"Sharks",emoji:"🦈"}, ray:{label:"Rays",emoji:"🐠"},
+  turtle:{label:"Turtles",emoji:"🐢"}, other:{label:"Others",emoji:"🦭"}
+};
+
+const D = [
+ {n:"Humpback Whale",sci:"Megaptera novaeangliae",t:"whale",e:"🐋",lat:-18.65,lng:-173.98,loc:"Vava'u, Tonga",src:"Happywhale",m:[7,8,9,10],depth:"0-40 m",story:"Every winter humpbacks migrate thousands of km from Antarctica to Tonga's warm shallows to give birth. You can hear males singing through the hull of a boat.",fact:"Individuals are re-identified by the pattern on the underside of their tail flukes - like a fingerprint.",obs:"Photo-ID contributed by a whale-swim guide, Aug 2025."},
+ {n:"Humpback Whale",sci:"Megaptera novaeangliae",t:"whale",e:"🐋",lat:-25.29,lng:152.86,loc:"Hervey Bay, Australia",src:"iNaturalist",m:[7,8,9,10,11],depth:"0-30 m",story:"Hervey Bay is a resting stop on the humpback highway - mothers pause here with calves before the long push south.",fact:"A humpback calf drinks up to 400 litres of milk a day and can double its weight in weeks.",obs:"Logged by a citizen snorkeler, Sep 2025."},
+ {n:"Humpback Whale",sci:"Megaptera novaeangliae",t:"whale",e:"🐋",lat:20.79,lng:-156.6,loc:"Maui, Hawaii",src:"Happywhale",m:[12,1,2,3,4],depth:"0-50 m",story:"Roughly 10,000 humpbacks gather in the Auau Channel each winter to breed - one of the densest seasonal gatherings on Earth.",fact:"Only males sing, and every whale in a region sings the same evolving song each season.",obs:"Fluke match to a whale first catalogued in 1998."},
+ {n:"Humpback Whale",sci:"Megaptera novaeangliae",t:"whale",e:"🐋",lat:20.5,lng:-69.6,loc:"Silver Bank, Dominican Republic",src:"Happywhale",m:[1,2,3],depth:"0-30 m",story:"A shallow coral bank where North Atlantic humpbacks come to mate and calve - one of the only places you can legally swim with them.",fact:"Silver Bank hosts up to 5,000 humpbacks in a single season.",obs:"Photo-ID from a liveaboard trip, Feb 2025."},
+ {n:"Blue Whale",sci:"Balaenoptera musculus",t:"whale",e:"🐋",lat:36.7,lng:-122.0,loc:"Monterey Bay, California",src:"OBIS",m:[7,8,9,10],depth:"0-100 m",story:"Summer upwelling floods Monterey's deep canyon with krill, drawing the largest animal ever to exist right up to the coast.",fact:"A blue whale's heart is the size of a small car and its call travels over 1,000 km underwater.",obs:"Survey transect record, NOAA/OBIS."},
+ {n:"Blue Whale",sci:"Balaenoptera musculus",t:"whale",e:"🐋",lat:5.95,lng:80.45,loc:"Mirissa, Sri Lanka",src:"OBIS",m:[12,1,2,3,4],depth:"0-200 m",story:"An unusual population of blue whales lingers year-round off southern Sri Lanka, where the shelf drops away close to shore.",fact:"These blue whales may not migrate at all - unusual for the species.",obs:"Line-transect research survey."},
+ {n:"Blue Whale",sci:"Balaenoptera musculus",t:"whale",e:"🐋",lat:48.6,lng:-64.2,loc:"Gulf of St Lawrence, Canada",src:"OBIS",m:[6,7,8,9],depth:"0-120 m",story:"Cold, krill-rich Atlantic water makes this estuary a summer feeding ground for blues, fins and minkes alike.",fact:"Blue whales eat up to 4 tonnes of krill a day in feeding season.",obs:"MICS long-term monitoring."},
+ {n:"Sperm Whale",sci:"Physeter macrocephalus",t:"whale",e:"🐋",lat:-42.42,lng:173.7,loc:"Kaikoura, New Zealand",src:"OBIS",m:"all",depth:"400-1000 m dives",story:"A deep undersea canyon meets the coast here, so sperm whales hunt giant squid within sight of the beach all year.",fact:"Sperm whales have the largest brain of any animal and dive over 2 km deep.",obs:"Resident individuals tracked since the 1990s."},
+ {n:"Sperm Whale",sci:"Physeter macrocephalus",t:"whale",e:"🐋",lat:38.5,lng:-28.6,loc:"Azores, Portugal",src:"Happywhale",m:[4,5,6,7,8,9,10],depth:"deep divers",story:"The Azores' volcanic slopes plunge into deep water where sperm whale families rest and socialise between dives.",fact:"Females and calves live in tight matrilineal families; males roam alone to colder seas.",obs:"Photo-ID via a local research collective."},
+ {n:"Orca",sci:"Orcinus orca",t:"whale",e:"🐋",lat:70.0,lng:20.9,loc:"Skjervøy, Norway",src:"iNaturalist",m:[11,12,1],depth:"0-60 m",story:"Each winter huge shoals of herring pour into these fjords, and orca and humpback pods follow them in for a feeding frenzy under the northern lights.",fact:"Norwegian orcas use 'carousel feeding' - herding herring into a ball, then stunning them with tail slaps.",obs:"Cold-water snorkel encounter logged Dec 2025."},
+ {n:"Orca",sci:"Orcinus orca",t:"whale",e:"🐋",lat:48.52,lng:-123.15,loc:"San Juan Islands, USA",src:"Happywhale",m:[5,6,7,8,9],depth:"0-70 m",story:"Home waters of the endangered Southern Resident orcas, who return each summer to follow migrating salmon.",fact:"Each resident pod has its own dialect of calls, passed down through generations.",obs:"Fin-and-saddle photo-ID, summer 2025."},
+ {n:"Gray Whale",sci:"Eschrichtius robustus",t:"whale",e:"🐋",lat:26.8,lng:-113.2,loc:"San Ignacio Lagoon, Mexico",src:"Happywhale",m:[1,2,3],depth:"shallow lagoon",story:"Gray whales complete one of the longest migrations of any mammal to breed in these Baja lagoons - and mothers famously bring calves right up to boats.",fact:"They're nicknamed 'friendlies' here for approaching humans to be touched - unique among wild whales.",obs:"Catalogued in the lagoon, Feb 2025."},
+ {n:"Southern Right Whale",sci:"Eubalaena australis",t:"whale",e:"🐋",lat:-34.42,lng:19.24,loc:"Hermanus, South Africa",src:"iNaturalist",m:[6,7,8,9,10,11],depth:"0-20 m",story:"So many right whales calve in this bay that the town employs a 'whale crier' who blows a kelp horn when they appear.",fact:"You can identify each one by the pattern of rough skin patches (callosities) on its head.",obs:"Shore-based sighting log, Aug 2025."},
+ {n:"Beluga Whale",sci:"Delphinapterus leucas",t:"whale",e:"🐋",lat:58.77,lng:-94.17,loc:"Churchill, Canada",src:"OBIS",m:[7,8],depth:"0-25 m",story:"Around 60,000 belugas crowd into the warm Churchill River estuary each summer to moult and give birth - a sea of white.",fact:"Belugas are so vocal they're called 'canaries of the sea', and can change the shape of their forehead to make sounds.",obs:"Estuary survey, July 2025."},
+ {n:"Narwhal",sci:"Monodon monoceros",t:"whale",e:"🐋",lat:73.0,lng:-68.0,loc:"Baffin Bay, Arctic",src:"OBIS",m:"all",depth:"to 1500 m",story:"The 'unicorn of the sea' spends its life among the Arctic pack ice, diving deeper than almost any marine mammal.",fact:"The tusk is a single overgrown tooth packed with 10 million nerve endings - likely a sensor.",obs:"Aerial and satellite-tag research."},
+ {n:"Whale Shark",sci:"Rhincodon typus",t:"shark",e:"🦈",lat:3.48,lng:72.83,loc:"South Ari Atoll, Maldives",src:"iNaturalist",m:"all",depth:"0-30 m",story:"One of the few places on Earth where the world's biggest fish can be found year-round, cruising the reef edge.",fact:"Each whale shark's spot pattern is unique and matched by software adapted from mapping the stars.",obs:"Snorkel ID contributed to the Maldives database."},
+ {n:"Whale Shark",sci:"Rhincodon typus",t:"shark",e:"🦈",lat:21.25,lng:-86.7,loc:"Isla Mujeres, Mexico",src:"Happywhale",m:[6,7,8,9],depth:"0-15 m",story:"Hundreds of whale sharks gather here each summer - the 'afuera' aggregation - to gorge on tuna spawn.",fact:"Up to 400 whale sharks have been counted feeding in a single day here, the largest gathering known.",obs:"Photo-ID from a research swim, Aug 2025."},
+ {n:"Whale Shark",sci:"Rhincodon typus",t:"shark",e:"🦈",lat:-21.9,lng:114.0,loc:"Ningaloo Reef, Australia",src:"iNaturalist",m:[3,4,5,6,7,8],depth:"0-20 m",story:"After the March coral spawning, whale sharks arrive along Ningaloo to feast - one of the most reliable encounters anywhere.",fact:"Whale sharks can live over 100 years and don't mature until around age 30.",obs:"Spotter-plane guided swim, May 2025."},
+ {n:"Whale Shark",sci:"Rhincodon typus",t:"shark",e:"🦈",lat:-2.5,lng:135.0,loc:"Cenderawasih Bay, Indonesia",src:"iNaturalist",m:"all",depth:"0-20 m",story:"Here whale sharks beg baitfish from fishermen's floating nets - a truly year-round, one-of-a-kind encounter.",fact:"This may be the only place where whale sharks associate with humans for food.",obs:"Liveaboard diver log, all seasons."},
+ {n:"Manta Ray",sci:"Mobula alfredi",t:"ray",e:"🐠",lat:5.28,lng:73.05,loc:"Hanifaru Bay, Maldives",src:"iNaturalist",m:[5,6,7,8,9,10,11],depth:"0-15 m",story:"When the monsoon current funnels plankton into this tiny bay, hundreds of mantas arrive to feed in spiralling 'cyclone' chains.",fact:"Mantas have the largest brain of any fish and appear to recognise themselves in mirrors.",obs:"ID photo to Manta Trust, peak Aug 2025."},
+ {n:"Manta Ray",sci:"Mobula alfredi",t:"ray",e:"🐠",lat:19.62,lng:-155.99,loc:"Kona, Hawaii",src:"iNaturalist",m:"all",depth:"0-15 m",story:"At night, dive lights draw clouds of plankton to the surface, and reef mantas barrel-roll through the glow to feed.",fact:"Kona's mantas are known individually by name from their belly spot patterns.",obs:"Night-dive encounter, logged monthly."},
+ {n:"Giant Manta",sci:"Mobula birostris",t:"ray",e:"🐠",lat:18.72,lng:-110.95,loc:"Socorro, Mexico",src:"Happywhale",m:[11,12,1,2,3,4,5],depth:"0-30 m",story:"The remote Revillagigedo islands draw oceanic giant mantas with 7-metre wingspans that seem to seek out divers' bubbles.",fact:"Giant mantas are curious and will circle divers for long periods, apparently for fun.",obs:"Liveaboard photo-ID, winter season."},
+ {n:"Great White Shark",sci:"Carcharodon carcharias",t:"shark",e:"🦈",lat:29.03,lng:-118.28,loc:"Guadalupe Island, Mexico",src:"OBIS",m:[8,9,10,11],depth:"0-40 m",story:"Crystal-clear water and a resident population make this volcanic island one of the best places on the planet to see great whites.",fact:"Great whites can detect a drop of blood in 100 litres of water and breach fully out of the sea when hunting.",obs:"Cage-dive research ID, autumn."},
+ {n:"Great White Shark",sci:"Carcharodon carcharias",t:"shark",e:"🦈",lat:-34.58,lng:19.35,loc:"Gansbaai, South Africa",src:"OBIS",m:[5,6,7,8,9],depth:"0-30 m",story:"'Shark Alley' between two seal colonies is a natural great white hunting ground, especially in the southern winter.",fact:"A great white can be individually identified by the ragged edge of its dorsal fin.",obs:"Dorsal-fin catalogue, winter survey."},
+ {n:"Tiger Shark",sci:"Galeocerdo cuvier",t:"shark",e:"🦈",lat:26.8,lng:-79.0,loc:"Tiger Beach, Bahamas",src:"iNaturalist",m:[10,11,12,1],depth:"5-15 m",story:"A shallow sandy shelf where big female tiger sharks gather - the world's premier place to dive with them.",fact:"Tiger sharks eat almost anything and keep turtle and seagrass populations balanced.",obs:"Diver ID by fin notch, winter 2025."},
+ {n:"Scalloped Hammerhead",sci:"Sphyrna lewini",t:"shark",e:"🦈",lat:5.53,lng:-87.06,loc:"Cocos Island, Costa Rica",src:"GBIF",m:[6,7,8,9,10,11],depth:"15-40 m",story:"Divers descend into the blue to watch schools of hundreds of hammerheads circle the seamounts of this remote UNESCO island.",fact:"Their wide-set eyes give near-360° vision, and the head is packed with electro-sensors.",obs:"Aggregated occurrence record."},
+ {n:"Hammerhead School",sci:"Sphyrna lewini",t:"shark",e:"🦈",lat:1.68,lng:-91.99,loc:"Darwin, Galápagos",src:"iNaturalist",m:"all",depth:"15-30 m",story:"Darwin's Arch is legendary for walls of scalloped hammerheads, plus whale sharks in season - a diver's holy grail.",fact:"Galápagos hammerheads gather by day and hunt alone at night across huge distances.",obs:"Liveaboard diver survey."},
+ {n:"Green Sea Turtle",sci:"Chelonia mydas",t:"turtle",e:"🐢",lat:-11.6,lng:144.0,loc:"Raine Island, Australia",src:"GBIF",m:[11,12,1,2],depth:"nesting beach",story:"The world's largest green turtle rookery - on peak nights tens of thousands of females haul ashore to nest on one tiny cay.",fact:"Turtles return to nest on the very beach where they hatched decades earlier, navigating by Earth's magnetic field.",obs:"Nesting census record."},
+ {n:"Green Sea Turtle",sci:"Chelonia mydas",t:"turtle",e:"🐢",lat:4.11,lng:118.63,loc:"Sipadan, Malaysia",src:"iNaturalist",m:"all",depth:"0-25 m",story:"Sipadan's walls are carpeted with green and hawksbill turtles so used to divers they barely stir - present all year.",fact:"Green turtles are the only sea turtles that are herbivores as adults, grazing seagrass meadows.",obs:"Reef diver log, year-round."},
+ {n:"Leatherback Turtle",sci:"Dermochelys coriacea",t:"turtle",e:"🐢",lat:10.83,lng:-61.05,loc:"Grande Riviere, Trinidad",src:"GBIF",m:[3,4,5,6,7,8],depth:"nesting beach",story:"The largest turtle on Earth - up to 900 kg - drags itself ashore here on one of the densest leatherback nesting beaches in the world.",fact:"Leatherbacks are almost warm-blooded and dive over 1,200 m, deeper than most whales, chasing jellyfish.",obs:"Beach patrol tagging record."},
+ {n:"Hawksbill Turtle",sci:"Eretmochelys imbricata",t:"turtle",e:"🐢",lat:4.2,lng:73.5,loc:"Baa Atoll, Maldives",src:"iNaturalist",m:"all",depth:"0-20 m",story:"Critically endangered hawksbills patrol these coral reefs year-round, nibbling sponges from the crevices.",fact:"Each hawksbill's face scales form a unique pattern used to ID them like a mugshot.",obs:"Snorkel face-ID to a national database."},
+ {n:"Bottlenose Dolphin",sci:"Tursiops truncatus",t:"dolphin",e:"🐬",lat:57.68,lng:-3.9,loc:"Moray Firth, Scotland",src:"OBIS",m:[6,7,8,9],depth:"0-40 m",story:"The world's most northerly bottlenose dolphins - big, thick-blubbered, and famous for leaping at Chanonry Point on a rising tide.",fact:"These dolphins have names: each uses a signature whistle to identify itself, like a spoken name.",obs:"Long-term photo-ID study."},
+ {n:"Spinner Dolphin",sci:"Stenella longirostris",t:"dolphin",e:"🐬",lat:24.15,lng:35.35,loc:"Sataya Reef, Egypt",src:"iNaturalist",m:"all",depth:"0-20 m",story:"A horseshoe reef in the Red Sea where hundreds of spinner dolphins rest by day - a reliable year-round pod.",fact:"Spinners leap and spin up to seven times in a single jump, possibly to shed parasites or signal.",obs:"Snorkel encounter, Red Sea."},
+ {n:"Dusky Dolphin",sci:"Lagenorhynchus obscurus",t:"dolphin",e:"🐬",lat:-42.4,lng:173.68,loc:"Kaikoura, New Zealand",src:"GBIF",m:"all",depth:"0-50 m",story:"Superpods of up to 1,000 acrobatic dusky dolphins ride the same rich Kaikoura upwelling as the sperm whales.",fact:"Duskies are among the most acrobatic of all dolphins, doing full backflips clear of the water.",obs:"Aggregated sighting record."},
+ {n:"Common Dolphin",sci:"Delphinus delphis",t:"dolphin",e:"🐬",lat:36.0,lng:-5.6,loc:"Strait of Gibraltar",src:"OBIS",m:"all",depth:"0-60 m",story:"Where the Atlantic meets the Mediterranean, common dolphins, pilot whales and even orcas funnel through the narrow strait.",fact:"Common dolphins swim in coordinated groups of thousands, herding fish into 'bait balls'.",obs:"Ferry-based survey transect."},
+ {n:"Leopard Seal",sci:"Hydrurga leptonyx",t:"other",e:"🦭",lat:-64.8,lng:-62.9,loc:"Antarctic Peninsula",src:"NOAA",m:[11,12,1,2,3],depth:"0-30 m",story:"A powerful solitary predator of the ice edge - curious, huge, and occasionally playful with divers during the polar summer.",fact:"Leopard seals sing eerie songs for hours underwater during the breeding season.",obs:"Polar expedition sighting.",live:"https://oceanexplorer.noaa.gov/livestreams/"},
+ {n:"California Sea Lion",sci:"Zalophus californianus",t:"other",e:"🦭",lat:24.59,lng:-110.38,loc:"Los Islotes, Mexico",src:"iNaturalist",m:"all",depth:"0-15 m",story:"A sea lion rookery in the Sea of Cortez where boisterous pups spin around snorkelers like underwater puppies.",fact:"Sea lions can dive to 270 m and sleep floating vertically at the surface, flippers in the air.",obs:"Snorkel encounter, year-round."},
+ {n:"Dugong",sci:"Dugong dugon",t:"other",e:"🦭",lat:25.07,lng:34.9,loc:"Marsa Alam, Egypt",src:"iNaturalist",m:"all",depth:"0-12 m",story:"A few resident dugongs graze the seagrass meadows here - the gentle 'sea cow' that inspired mermaid legends.",fact:"Dugongs are more closely related to elephants than to any marine mammal, and can live over 70 years.",obs:"Seagrass-bay diver sighting."},
+ {n:"Ocean Sunfish (Mola)",sci:"Mola mola",t:"other",e:"🐟",lat:-8.68,lng:115.45,loc:"Nusa Lembongan, Bali",src:"iNaturalist",m:[7,8,9,10],depth:"15-40 m",story:"In the cold upwelling season, huge disc-shaped mola rise from the deep to reef 'cleaning stations' to have parasites picked off.",fact:"The mola is the heaviest bony fish on Earth - up to 2.3 tonnes - and can lay 300 million eggs.",obs:"Deep-reef diver log, cold season."},
+ {n:"Sardine Run",sci:"Sardinops sagax",t:"other",e:"🐟",lat:-31.5,lng:29.6,loc:"Wild Coast, South Africa",src:"Happywhale",m:[6,7],depth:"0-30 m",story:"Billions of sardines move up the coast in winter, triggering 'bait balls' hunted by dolphins, sharks, gannets and Bryde's whales at once.",fact:"It's called 'the greatest shoal on Earth' - the shoal can be 15 km long and visible from space.",obs:"Multi-species predator event, June."},
+ {n:"Fin Whale",sci:"Balaenoptera physalus",t:"whale",e:"🐋",lat:28.8,lng:-112.3,loc:"Gulf of California, Mexico",src:"OBIS",m:"all",depth:"0-100 m",story:"The second-largest animal alive, fin whales are unusually resident in the productive 'aquarium of the world', the Sea of Cortez.",fact:"Fin whales are asymmetrically coloured - the lower jaw is white on the right side only.",obs:"Long-term photo-ID study."},
+ {n:"Dwarf Minke Whale",sci:"Balaenoptera acutorostrata",t:"whale",e:"🐋",lat:-14.7,lng:145.65,loc:"Ribbon Reefs, Australia",src:"GBIF",m:[6,7],depth:"0-20 m",story:"For a few weeks each winter, curious dwarf minke whales approach snorkelers on the northern Great Barrier Reef - a predictable, gentle encounter.",fact:"This is the only known predictable aggregation of dwarf minke whales in the world.",obs:"Reef research encounter, June-July."},
+ {n:"Manta Ray",sci:"Mobula alfredi",t:"ray",e:"🐠",lat:-8.72,lng:115.54,loc:"Nusa Penida, Bali",src:"iNaturalist",m:"all",depth:"0-20 m",story:"Manta Point off Nusa Penida hosts reef mantas at a cleaning station all year, even when the water turns cold and green.",fact:"Reef mantas queue politely at cleaning stations for cleaner wrasse to service them.",obs:"Reef diver log, year-round."},
+ {n:"Pygmy Blue Whale",sci:"Balaenoptera musculus brevicauda",t:"whale",e:"🐋",lat:-33.6,lng:115.0,loc:"Perth Canyon, Australia",src:"OBIS",m:[2,3,4,5],depth:"0-150 m",story:"Pygmy blue whales pause to feed in the deep Perth Canyon during their autumn migration up the west coast.",fact:"'Pygmy' is relative - they still reach 24 m, longer than a bus and a half.",obs:"Acoustic + visual survey."},
+ {n:"Bryde's Whale",sci:"Balaenoptera edeni",t:"whale",e:"🐋",lat:-36.8,lng:174.9,loc:"Hauraki Gulf, New Zealand",src:"GBIF",m:"all",depth:"0-40 m",story:"A resident population of Bryde's whales feeds year-round in the Hauraki Gulf right outside Auckland - one of the few resident groups worldwide.",fact:"Bryde's whales are the only baleen whales that live in warm water all year and rarely migrate.",obs:"Aggregated occurrence record."},
+ {n:"Beluga Live Cam",sci:"Delphinapterus leucas",t:"whale",e:"🐋",lat:58.75,lng:-93.8,loc:"Hudson Bay Beluga Cam",src:"NOAA",m:[7,8],depth:"live stream",story:"A live underwater and boat-mounted camera streams from among the summer beluga gathering - the closest thing to real-time whale TV.",fact:"On a good day thousands of belugas swim past the lens, chirping and whistling.",obs:"Streaming via explore.org / partners.",live:"https://explore.org/livecams/beluga-whales/beluga-boat-cam-underwater"},
+ {n:"Orca Hydrophone",sci:"Orcinus orca",t:"whale",e:"🐋",lat:50.55,lng:-126.83,loc:"OrcaLab, Canada",src:"NOAA",m:"all",depth:"live audio",story:"OrcaLab's network of hydrophones lets you listen live for Northern Resident orca calls echoing through Blackfish Sound.",fact:"Researchers here have listened to the same orca families for over 50 years - the longest such study on Earth.",obs:"Live hydrophone feed, year-round.",live:"https://orcalab.org/live-streams/"}
+];
+
+const state = {sources:new Set(Object.keys(SOURCES)),types:new Set(Object.keys(TYPES)),month:0};
+const MN=["All year","January","February","March","April","May","June","July","August","September","October","November","December"];
+
+/* ---------- Map ---------- */
+const map=L.map('map',{center:[18,20],zoom:3,minZoom:2,maxZoom:9,worldCopyJump:true});
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',{attribution:'Esri Ocean · data mirrors OBIS · GBIF · Happywhale · iNaturalist · NOAA',maxZoom:13}).addTo(map);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}',{maxZoom:13,opacity:.55}).addTo(map);
+
+let markers=[];
+function makeMarker(d){
+  const c=SOURCES[d.src].color;
+  const icon=L.divIcon({className:'',html:`<div class="crit" style="--c:${c}">${d.e}</div>`,iconSize:[34,34],iconAnchor:[17,17]});
+  const mk=L.marker([d.lat,d.lng],{icon}).addTo(map);
+  mk.on('click',()=>openInfo(d));
+  mk._d=d;return mk;
+}
+const critStyle=document.createElement('style');
+critStyle.textContent=`.crit{position:relative;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;font-size:17px;cursor:pointer;border:2px solid var(--c);background:rgba(4,20,34,.72);box-shadow:0 0 14px var(--c);animation:mpulse 2.6s ease-out infinite;backdrop-filter:blur(2px)}.crit:hover{transform:scale(1.18)}@keyframes mpulse{0%{box-shadow:0 0 0 0 var(--c),0 0 12px var(--c)}70%{box-shadow:0 0 0 12px transparent,0 0 12px var(--c)}100%{box-shadow:0 0 0 0 transparent,0 0 12px var(--c)}}.leaflet-marker-icon{background:none;border:none}`;
+document.head.appendChild(critStyle);
+D.forEach(d=>markers.push(makeMarker(d)));
+
+function visible(d){
+  if(!state.sources.has(d.src))return false;
+  if(!state.types.has(d.t))return false;
+  if(state.month!==0){if(d.m!=="all"&&!d.m.includes(state.month))return false;}
+  return true;
+}
+function refresh(){
+  let n=0;
+  markers.forEach(mk=>{
+    if(visible(mk._d)){if(!map.hasLayer(mk))mk.addTo(map);n++;}
+    else if(map.hasLayer(mk))map.removeLayer(mk);
+  });
+  document.getElementById('cnum').textContent=n;
+}
+
+/* ---------- Controls ---------- */
+const srcWrap=document.getElementById('sources');
+Object.entries(SOURCES).forEach(([key,s])=>{
+  const count=D.filter(d=>d.src===key).length;
+  const el=document.createElement('div');el.className='src';el.style.setProperty('--c',s.color);
+  el.innerHTML=`<span class="box"></span><span class="dot"></span><span class="lbl">${s.name}</span><span class="n">${count}</span>`;
+  el.onclick=()=>{
+    if(state.sources.has(key)){state.sources.delete(key);el.classList.add('off');}
+    else{state.sources.add(key);el.classList.remove('off');}
+    document.getElementById('srcAll').textContent=state.sources.size===5?'all on':state.sources.size+' on';
+    refresh();
+  };
+  srcWrap.appendChild(el);
+});
+const chipWrap=document.getElementById('chips');
+Object.entries(TYPES).forEach(([key,t])=>{
+  const el=document.createElement('div');el.className='chip on';el.innerHTML=`${t.emoji} ${t.label}`;
+  el.onclick=()=>{
+    if(state.types.has(key)){state.types.delete(key);el.classList.remove('on');el.classList.add('off');}
+    else{state.types.add(key);el.classList.add('on');el.classList.remove('off');}
+    refresh();
+  };
+  chipWrap.appendChild(el);
+});
+const slider=document.getElementById('season');
+slider.oninput=()=>{state.month=+slider.value;document.getElementById('mlabel').textContent=MN[state.month];refresh();};
+
+/* ---------- Info panel ---------- */
+function openInfo(d){
+  const c=SOURCES[d.src].color;
+  document.getElementById('hEmoji').textContent=d.e;
+  document.getElementById('hero').style.background=`radial-gradient(circle at 70% 30%, ${c}55, #0a2135 70%)`;
+  const seasonTxt=d.m==="all"?"Year-round":d.m.map(x=>MN[x].slice(0,3)).join(" · ");
+  document.getElementById('hCap').textContent=`Latest capture near ${d.loc}`;
+  document.getElementById('ibody').innerHTML=`
+    <h2>${d.n}</h2><div class="sci">${d.sci}</div>
+    <div class="badges">
+      <span class="badge src" style="--c:${c}">${SOURCES[d.src].short}</span>
+      <span class="badge">${TYPES[d.t].label.replace(/s$/,'')}</span>
+      <span class="badge">📍 ${d.loc}</span>
+    </div>
+    <div class="row">
+      <div class="stat"><div class="k">Best season</div><div class="v">${seasonTxt}</div></div>
+      <div class="stat"><div class="k">Typical depth</div><div class="v">${d.depth}</div></div>
+    </div>
+    <p class="story">${d.story}</p>
+    <div class="fact"><b>Did you know?</b> ${d.fact}</div>
+    ${d.live?`<a class="live" href="${d.live}" target="_blank" rel="noopener">▶ WATCH LIVE FEED</a>`:''}
+    <div class="obs">ℹ️ ${d.obs}<br><span style="color:#6f96ad">In the full product this card would pull the newest diver photos and the live sighting record from ${SOURCES[d.src].name}.</span></div>`;
+  document.getElementById('info').classList.add('open');
+  map.panTo([d.lat,d.lng],{animate:true});
+}
+function closeInfo(){document.getElementById('info').classList.remove('open');}
+
+/* ---------- Depth gauge ---------- */
+const ZONES=[
+  {z:3,d:"Surface",s:"Drifting above the blue",w:8,zone:"🌊 Sunlight zone · 0-200 m"},
+  {z:4,d:"20 m",s:"Fins and flukes below",w:22,zone:"🌊 Sunlight zone · 0-200 m"},
+  {z:5,d:"120 m",s:"Into the blue",w:38,zone:"🌊 Sunlight zone · 0-200 m"},
+  {z:6,d:"400 m",s:"Light is fading",w:55,zone:"🌫️ Twilight zone · 200-1000 m"},
+  {z:7,d:"900 m",s:"Where sperm whales hunt",w:72,zone:"🌫️ Twilight zone · 200-1000 m"},
+  {z:8,d:"1,600 m",s:"The deep dark",w:88,zone:"🌑 Midnight zone · 1000 m+"},
+  {z:9,d:"3,000 m",s:"Abyss",w:98,zone:"🌑 Midnight zone · 1000 m+"}
+];
+function updateGauge(){
+  const z=Math.round(map.getZoom());
+  const g=ZONES.find(x=>x.z===z)||ZONES[ZONES.length-1];
+  document.getElementById('depth').textContent=g.d;
+  document.getElementById('depthsub').textContent=g.s;
+  document.getElementById('depthbar').style.width=g.w+"%";
+  document.getElementById('zone').textContent=g.zone;
+  document.querySelector('.vignette').style.background=`radial-gradient(ellipse at 50% 30%,transparent ${Math.max(10,45-z*4)}%,rgba(2,10,20,${Math.min(.85,.4+z*.05)}) 100%)`;
+}
+
+/* ---------- Bubbles ---------- */
+(function(){
+  const wrap=document.getElementById('bubbles');
+  for(let i=0;i<26;i++){
+    const b=document.createElement('div');b.className='bubble';
+    const s=3+Math.random()*10;b.style.width=b.style.height=s+'px';
+    b.style.left=Math.random()*100+'vw';
+    b.style.animationDuration=(7+Math.random()*11)+'s';
+    b.style.animationDelay=(-Math.random()*12)+'s';
+    wrap.appendChild(b);
+  }
+})();
+
+/* =========================================================
+   LIVING CREATURES
+   ========================================================= */
+const SVGs={
+  whale:(c1,c2)=>`<svg viewBox="0 0 200 96"><path d="M12,52 C20,30 70,22 110,26 C150,29 176,40 190,30 C184,48 168,52 158,53 C170,60 180,76 184,84 C170,80 156,72 146,64 C120,80 60,80 30,66 C14,58 6,58 12,52 Z" fill="${c1}"/><path d="M30,58 C60,70 120,70 146,58 C120,66 60,66 30,58 Z" fill="${c2}" opacity=".55"/><circle cx="40" cy="44" r="3.4" fill="#05141f"/></svg>`,
+  dolphin:(c1,c2)=>`<svg viewBox="0 0 180 82"><path d="M10,48 C30,36 72,32 112,34 C122,22 140,17 152,11 C148,26 144,32 142,36 C162,36 174,42 180,38 C174,50 158,52 148,51 C152,60 152,68 148,74 C140,66 134,58 130,52 C92,60 42,60 18,52 C8,50 6,50 10,48Z" fill="${c1}"/><path d="M24,50 C60,58 110,58 130,52 C110,56 60,56 24,50Z" fill="${c2}" opacity=".5"/><circle cx="36" cy="42" r="2.8" fill="#05141f"/></svg>`,
+  shark:(c1,c2)=>`<svg viewBox="0 0 196 86"><path d="M6,50 C40,42 82,42 122,44 C132,28 152,21 164,13 C158,31 154,40 152,44 C170,46 182,52 190,48 C182,60 162,60 152,59 C156,68 152,78 144,84 C140,72 136,64 132,56 C92,62 42,62 14,54 C6,52 4,52 6,50Z" fill="${c1}"/><path d="M64,54 l22,0 l-11,12 Z" fill="${c1}"/><path d="M12,52 l16,-1 l-2,4 Z" fill="#e9f6ff" opacity=".5"/><circle cx="30" cy="48" r="2.6" fill="#05141f"/></svg>`,
+  manta:(c1,c2)=>`<svg viewBox="0 0 200 124"><path d="M100,20 C122,20 142,42 192,62 C150,68 130,72 118,76 C121,90 116,104 108,114 L100,84 L92,114 C84,104 79,90 82,76 C70,72 50,68 8,62 C58,42 78,20 100,20 Z" fill="${c1}"/><path d="M91,26 h18 v12 h-18 Z" fill="${c1}"/><path d="M60,60 C90,52 110,52 140,60 C110,56 90,56 60,60Z" fill="${c2}" opacity=".5"/><circle cx="87" cy="42" r="2.6" fill="#05141f"/><circle cx="113" cy="42" r="2.6" fill="#05141f"/></svg>`,
+  turtle:(c1,c2)=>`<svg viewBox="0 0 150 116"><path d="M30,28 q-20,-8 -22,8 q16,4 26,8Z" fill="${c1}"/><path d="M120,28 q20,-8 22,8 q-16,4 -26,8Z" fill="${c1}"/><path d="M30,88 q-20,8 -22,-8 q16,-4 26,-8Z" fill="${c1}"/><path d="M120,88 q20,8 22,-8 q-16,-4 -26,-8Z" fill="${c1}"/><ellipse cx="75" cy="58" rx="20" ry="16" fill="${c1}" transform="translate(0,-42)"/><circle cx="75" cy="12" r="9" fill="${c1}"/><ellipse cx="75" cy="60" rx="44" ry="36" fill="${c1}"/><ellipse cx="75" cy="60" rx="31" ry="25" fill="${c2}" opacity=".55"/><path d="M75,40 l10,14 l-10,14 l-10,-14Z" fill="${c1}" opacity=".5"/></svg>`,
+  jelly:(c1,c2)=>`<svg viewBox="0 0 84 116"><path d="M8,42 C8,16 76,16 76,42 C76,54 68,58 42,58 C16,58 8,54 8,42Z" fill="${c1}" opacity=".82"/><path d="M14,52 C10,54 8,58 10,62" fill="none"/><path d="M18,52 q4,32 -2,54 M32,56 q2,36 -4,52 M50,56 q-2,36 4,52 M66,52 q-4,32 2,54" stroke="${c2}" stroke-width="3.5" fill="none" opacity=".75" stroke-linecap="round"/></svg>`,
+  fish:(c1,c2)=>`<svg viewBox="0 0 124 84"><g fill="${c1}"><path d="M8,22 l13,5 l-13,5 l4,-5Z"/><path d="M34,10 l13,5 l-13,5 l4,-5Z"/><path d="M30,38 l13,5 l-13,5 l4,-5Z"/><path d="M58,24 l13,5 l-13,5 l4,-5Z"/><path d="M82,12 l13,5 l-13,5 l4,-5Z"/><path d="M84,40 l13,5 l-13,5 l4,-5Z"/><path d="M104,28 l13,5 l-13,5 l4,-5Z"/></g></svg>`
+};
+/* species config: baseW at scale 1, colors, spawn weight, aspect(height/width) */
+const SPECIES={
+  whale:{w:170,c:["#1c4f74","#4d8cb2"],weight:3,ar:.48},
+  dolphin:{w:96,c:["#4a7fa0","#89bdd8"],weight:3,ar:.46},
+  shark:{w:118,c:["#5c748a","#9fb6c6"],weight:2,ar:.44},
+  manta:{w:128,c:["#26394c","#5a7690"],weight:2,ar:.62},
+  turtle:{w:74,c:["#2f6b52","#66b892"],weight:2,ar:.78},
+  jelly:{w:52,c:["#bd93da","#eccffd"],weight:2,ar:1.38},
+  fish:{w:88,c:["#6fb6c9","#bfe8f2"],weight:3,ar:.68}
+};
+const SPKEYS=[];Object.entries(SPECIES).forEach(([k,v])=>{for(let i=0;i<v.weight;i++)SPKEYS.push(k);});
+
+const THOUGHTS_GENERIC=["humans are weird 👀 just staring at me","just keep swimming...","do I have something on my fin?","who ordered all this krill?","new diver just dropped 📸","stop staring, it's rude 😌","the vibes down here are immaculate","brb, going deeper","is this thing on? 🎤","I'm kind of a big deal","10,000 km and my back still hurts","thalassophobia? never heard of her","yes I saw you wave 🙄","living my best pelagic life"];
+const THOUGHTS_SP={
+  whale:["singing my hit single rn 🎶","that's Mr. Leviathan to you","biggest heart in the ocean, literally ❤️","just vibing at 40 tonnes"],
+  dolphin:["wanna see a backflip? 🤸","click click whistle = 'hi'","race you to the boat 🏁","I have a NAME you know"],
+  shark:["I'm friendlier than the movies 🦈","smile for the camera 🦷","misunderstood since 1975","chill, I already ate"],
+  manta:["doing barrel rolls, ignore me","biggest brain in the sea, actually 🧠","7 metres of pure grace","cleaning station, back in 5"],
+  turtle:["no rush, I've got 80 years","shell yeah 🐢","been doing this since the dinosaurs","which beach was I born on again?"],
+  jelly:["no brain, no problems 🪼","95% water, 100% vibe","just drifting, don't touch","been here 500 million years, you?"],
+  fish:["safety in numbers! 🐟","left! no, my left!","is that a shark? RUN","we move as one, mostly"]
+};
+
+const life=document.getElementById('life');
+const critters=[];
+let zoomScale=0.6, targetCount=13, lastT=0;
+
+function pickColorPair(sp){return SPECIES[sp].c;}
+function spawn(offscreen){
+  const sp=SPKEYS[Math.floor(Math.random()*SPKEYS.length)];
+  const cfg=SPECIES[sp];
+  const W=window.innerWidth,H=window.innerHeight;
+  const dir=Math.random()<.5?1:-1;
+  const personal=.75+Math.random()*.6;
+  const size=cfg.w*zoomScale*personal;
+  const el=document.createElement('div');el.className='swim '+(sp==='jelly'?'jelly':'');
+  const body=document.createElement('div');body.className='body';
+  const [c1,c2]=pickColorPair(sp);
+  body.innerHTML=`<div class="wag"><div style="width:${size}px">${SVGs[sp](c1,c2)}</div></div>`;
+  el.appendChild(body);
+  const startX = offscreen ? (dir>0? -size-40 : W+40) : Math.random()*W;
+  const baseY = 60 + Math.random()*(H-160);
+  const spd = (14+Math.random()*26)*(sp==='whale'?.7:1)*(sp==='fish'?1.3:1);
+  const c={el,body,sp,dir,size,x:startX,baseY,y:baseY,vx:spd*dir,phase:Math.random()*6.28,bobAmp:8+Math.random()*14,bobSpd:.4+Math.random()*.5,thoughtUntil:0,nextEyeFlip:0};
+  applyFlip(c);
+  el.style.transform=`translate3d(${c.x}px,${c.y}px,0)`;
+  life.appendChild(el);
+  critters.push(c);
+}
+function applyFlip(c){c.body.style.transform=`scaleX(${c.dir>0?-1:1})`;}
+function removeCritter(i){const c=critters[i];c.el.remove();critters.splice(i,1);}
+
+function resize(){/* nothing needed, uses window each frame */}
+window.addEventListener('resize',resize);
+
+function showThought(c,t){
+  if(c.thoughtUntil>t)return;
+  const pool=Math.random()<.55?THOUGHTS_SP[c.sp]:THOUGHTS_GENERIC;
+  const line=pool[Math.floor(Math.random()*pool.length)];
+  const b=document.createElement('div');b.className='thought';b.textContent=line;
+  c.el.appendChild(b);
+  requestAnimationFrame(()=>b.classList.add('show'));
+  c.thoughtUntil=t+5200;
+  setTimeout(()=>{b.classList.remove('show');setTimeout(()=>b.remove(),400);},4600);
+}
+let nextThought=0;
+function maybeThought(t){
+  if(t<nextThought)return;
+  nextThought=t+2600+Math.random()*2600;
+  // prefer big, on-screen critters
+  const W=window.innerWidth;
+  const cand=critters.filter(c=>c.x>60&&c.x<W-180&&c.thoughtUntil<t);
+  if(!cand.length)return;
+  cand.sort((a,b)=>b.size-a.size);
+  const pick=cand[Math.floor(Math.random()*Math.min(4,cand.length))];
+  showThought(pick,t);
+}
+
+function frame(t){
+  if(!lastT)lastT=t;
+  let dt=(t-lastT)/1000; if(dt>0.05)dt=0.05; lastT=t;
+  const W=window.innerWidth,H=window.innerHeight;
+  for(let i=critters.length-1;i>=0;i--){
+    const c=critters[i];
+    c.x+=c.vx*dt;
+    c.phase+=c.bobSpd*dt;
+    c.y=c.baseY+Math.sin(c.phase)*c.bobAmp;
+    c.el.style.transform=`translate3d(${c.x}px,${c.y}px,0)`;
+    if((c.dir>0&&c.x>W+80)||(c.dir<0&&c.x<-c.size-80)){removeCritter(i);}
+  }
+  // maintain population
+  while(critters.length<targetCount)spawn(true);
+  maybeThought(t);
+  requestAnimationFrame(frame);
+}
+
+function setDensity(){
+  const z=Math.round(map.getZoom());
+  // deeper zoom -> bigger creatures, slightly fewer
+  zoomScale=Math.min(2.0,Math.max(.5,.5+(z-3)*0.26));
+  targetCount=Math.max(7,Math.round(15-(z-3)*1.1));
+  // trim overflow gently
+  while(critters.length>targetCount+3)removeCritter(critters.length-1);
+}
+
+map.on('zoomend',()=>{updateGauge();setDensity();});
+
+/* ---------- Intro ---------- */
+document.getElementById('dive').onclick=()=>{
+  document.getElementById('intro').classList.add('hide');
+  setTimeout(()=>document.getElementById('intro').remove(),950);
+  map.flyTo([12,60],4,{duration:2.4});
+};
+
+/* ---------- Boot ---------- */
+refresh();updateGauge();setDensity();
+for(let i=0;i<targetCount;i++)spawn(false);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
