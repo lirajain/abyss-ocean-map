@@ -6,7 +6,7 @@
 
 Abyss is a single-file, dependency-light web app that turns open marine-biodiversity data into an immersive map you actually want to explore. Zoom into the sea and illustrated creatures swim right up to you (and yes, they have opinions). Click any hotspot to read where a species is, when it is best seen, and who logged it.
 
-**[▶ Try the live demo](#running-it)** · **[Contribute](CONTRIBUTING.md)** · **[Data sources](docs/DATA_SOURCES.md)**
+**[🌊 Try it live](https://lirajain.github.io/abyss-ocean-map/)** · **[Contribute](CONTRIBUTING.md)** · **[Data sources](docs/DATA_SOURCES.md)**
 
 Created by **[Anushka (Lira) Jain (@lirajain)](https://github.com/lirajain)** · MIT licensed · contributions welcome
 
@@ -29,7 +29,9 @@ Most marine sighting maps are built for researchers and look the part. Abyss is 
 
 ## 🚀 Running it
 
-Abyss is a single `index.html` file. No build step, no install.
+**Live site:** [lirajain.github.io/abyss-ocean-map](https://lirajain.github.io/abyss-ocean-map/) - just open it in any browser, on desktop or phone. Give the very first load a few seconds.
+
+Abyss is also a single `index.html` file, so you can run it yourself. No build step, no install.
 
 **Option 1 - just open it.** Download `index.html` and open it in any modern browser. You need an internet connection so the ocean-floor map tiles and the map library (Leaflet) can load.
 
